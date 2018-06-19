@@ -2,89 +2,154 @@
 
 namespace App\Http\Controllers;
 
-use App\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Session;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
+use App\Item;
+
+use Image;
 
 class UserController extends Controller
 {
-     public function RegisterUser(Request $request){
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index(Request $request)
+    {
+        $query = Item::with('category');
+        if($request->has('category') && ($request->get('category') != 0)){
+            $query->where('category_id', $request->get('category'));
+        }
 
-       $this->validate($request , [
+        if($request->has('model') && !is_null($request->get('model'))){
+            $query->where('model', 'like', '%'.$request->get('model').'%');
+        }
 
-           'type'=> 'required',
-           'f_name'=> 'required|max:20',
-           'l_name'=> 'required|max:20',
-           'email'=> 'required|email|unique:users',
-           'password'=> 'required|min:6'
-       ]);
+        if($request->has('price_start') && $request->has('price_end') && !is_null($request->get('price_start')) && !is_null($request->get('price_end'))){
+            $query->whereBetween('price', [$request->get('price_start'), $request->get('price_end')]);
+        }
 
-       $table = new User();
+        $categories = \App\Category::get();
+        $items = $query->paginate(10);
 
-       $table->first_name = $request->input('f_name');
-       $table->last_name = $request->input('l_name');
-       $table->email = $request->input('email');
-       $table->password = bcrypt($request->input('password'));
-       $table->type = $request->input('type');
+        return view('home', ['items' => $items, 'categories' => $categories]);
+    }
 
-       $table->save();
-       return redirect('/login');
+    public function viewItem($item_id=null)
+    {
+        $item = Item::with('category','comments.user', 'advertisements.user')->find($item_id);
+        return view('user.item', ['item' => $item]);
+    }
 
-     }
+    public function saveComment(Request $request, $item_id)
+    {
+        $this->validate($request, [
+            'comment' => 'required'
+        ]);
+        $item = Item::find($item_id);
+        \App\Comment::create([
+            'user_id' => \Auth::user()->id,
+            'item_id' => $item->id,
+            'comment' => $request->comment,
+        ]); 
 
+        return redirect('/item/'.$item_id);
+    }
 
+    public function saveAdvertisement(Request $request, $item_id)
+    {
+        $this->validate($request, [
+            'image' => 'required',
+            'description' => 'required',
+            'price' => 'required',
+            'location' => 'required',
+            'tel_no' => 'required'
+        ]);
 
-     public function LoginUser(Request $request){
+        $item = Item::find($item_id);
+        $advertisement = \App\Advertisement::create([
+            'user_id' => \Auth::user()->id,
+            'item_id' => $item->id,
+            'description' => $request->description,
+            'price' => $request->price,
+            'location' => $request->location,
+            'tel_no' => $request->tel_no,
+            'condition' => $request->condition
+        ]); 
+        if($request->has('image')){
+            $asset_path = 'advertisements/'.\Auth::user()->id.'/'.$advertisement->id.'.'.$request->image->getClientOriginalExtension();
+            $image = Image::make($request->image);
+            Storage::put('public/' . $asset_path, (string) $image->encode('jpg'));
+            $advertisement->image = Storage::url($asset_path);
+            $advertisement->save();
+        }        
+        return redirect('/item/'.$item_id);
+    }
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
 
-       $this->validate($request , [
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        //
+    }
 
-           'email'=> 'required|email',
-           'password'=> 'required|min:6'
-       ]);
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
 
-       $data = $request->only('email','password');
-       $email = $request->input('email');
-       if(Auth::attempt($data)){
-         $type = DB::table('users')->where('email', $email)->value('type');
-         if($type == 'AD'){
-           return redirect()->route('ad');
-         }else if($type == 'NS'){
-           return redirect()->route('ns');
-         }else if($type == 'SS'){
-           return redirect()->route('ss');
-         }else{
-           return redirect()->back()->with('message','Invalid User');
-         }
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+    }
 
-       }
-       return redirect()->back()->with('message','Login failed');
-     }
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        //
+    }
 
-
-
-     public function getAdminDB(){
-       return view('admin');
-     }
-
-     public function getNSDB(){
-       return view('normal_seller');
-     }
-
-     public function getSSDB(){
-       return view('store_seller');
-     }
-
-
-
-
-     public function logout(){
-
-       Auth::logout();
-       Session::flush();
-       return redirect('/')->with('message','Logged out');
-
-     }
-
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        //
+    }
 }
